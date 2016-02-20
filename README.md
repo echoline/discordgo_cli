@@ -1,6 +1,10 @@
 <img align="right" src="http://bwmarrin.github.io/discordgo/img/discordgo.png">
 Discordgo 
 ====
+>If for some reason you stumbled upon this repo, use the official one: https://github.com/bwmarrin/discordgo
+This is merely a master fork for stability reasons of discord-cli.
+Since their highly unstable develop branch is their default one this can give problems with continious integration tools or even the dependency errors. When 1.0 arrives, and becomes default, this repo gets removed. 
+
 [![GoDoc](https://godoc.org/github.com/bwmarrin/discordgo?status.svg)](https://godoc.org/github.com/bwmarrin/discordgo) [![Go report](http://goreportcard.com/badge/bwmarrin/discordgo)](http://goreportcard.com/report/bwmarrin/discordgo) [![Build Status](https://travis-ci.org/bwmarrin/discordgo.svg?branch=master)](https://travis-ci.org/bwmarrin/discordgo)
 
 Discordgo is a [Go](https://golang.org/) package that provides low level 
