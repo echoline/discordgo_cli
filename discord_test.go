@@ -12,13 +12,13 @@ import (
 var (
 	dg *Session // Stores global discordgo session
 
-	envToken    string = os.Getenv("DG_TOKEN")    // Token to use when authenticating
-	envEmail    string = os.Getenv("DG_EMAIL")    // Email to use when authenticating
-	envPassword string = os.Getenv("DG_PASSWORD") // Password to use when authenticating
-	envGuild    string = os.Getenv("DG_GUILD")    // Guild ID to use for tests
-	envChannel  string = os.Getenv("DG_CHANNEL")  // Channel ID to use for tests
-	envUser     string = os.Getenv("DG_USER")     // User ID to use for tests
-	envAdmin    string = os.Getenv("DG_ADMIN")    // User ID of admin user to use for tests
+	envToken    = os.Getenv("DG_TOKEN")    // Token to use when authenticating
+	envEmail    = os.Getenv("DG_EMAIL")    // Email to use when authenticating
+	envPassword = os.Getenv("DG_PASSWORD") // Password to use when authenticating
+	//	envGuild    = os.Getenv("DG_GUILD")    // Guild ID to use for tests
+	envChannel = os.Getenv("DG_CHANNEL") // Channel ID to use for tests
+	//	envUser     = os.Getenv("DG_USER")     // User ID to use for tests
+	envAdmin = os.Getenv("DG_ADMIN") // User ID of admin user to use for tests
 )
 
 func init() {
@@ -222,5 +222,67 @@ func TestOpenClose(t *testing.T) {
 
 	if err = d.Close(); err != nil {
 		t.Fatalf("TestClose, d.Close failed: %+v", err)
+	}
+}
+
+func TestAddHandler(t *testing.T) {
+	testHandlerCalled := 0
+	testHandler := func(s *Session, m *MessageCreate) {
+		testHandlerCalled++
+	}
+
+	interfaceHandlerCalled := 0
+	interfaceHandler := func(s *Session, i interface{}) {
+		interfaceHandlerCalled++
+	}
+
+	bogusHandlerCalled := false
+	bogusHandler := func(s *Session, se *Session) {
+		bogusHandlerCalled = true
+	}
+
+	d := Session{}
+	d.AddHandler(testHandler)
+	d.AddHandler(testHandler)
+
+	d.AddHandler(interfaceHandler)
+	d.AddHandler(bogusHandler)
+
+	d.handle(&MessageCreate{})
+	d.handle(&MessageDelete{})
+
+	// testHandler will be called twice because it was added twice.
+	if testHandlerCalled != 2 {
+		t.Fatalf("testHandler was not called twice.")
+	}
+
+	// interfaceHandler will be called twice, once for each event.
+	if interfaceHandlerCalled != 2 {
+		t.Fatalf("interfaceHandler was not called twice.")
+	}
+
+	if bogusHandlerCalled {
+		t.Fatalf("bogusHandler was called.")
+	}
+}
+
+func TestRemoveHandler(t *testing.T) {
+	testHandlerCalled := 0
+	testHandler := func(s *Session, m *MessageCreate) {
+		testHandlerCalled++
+	}
+
+	d := Session{}
+	r := d.AddHandler(testHandler)
+
+	d.handle(&MessageCreate{})
+
+	r()
+
+	d.handle(&MessageCreate{})
+
+	// testHandler will be called once, as it was removed in between calls.
+	if testHandlerCalled != 1 {
+		t.Fatalf("testHandler was not called once.")
 	}
 }

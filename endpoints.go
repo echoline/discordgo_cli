@@ -11,6 +11,7 @@
 
 package discordgo
 
+// Known Discord API Endpoints.
 var (
 	STATUS      = "https://status.discordapp.com/api/v2/"
 	SM          = STATUS + "scheduled-maintenances/"
@@ -49,6 +50,7 @@ var (
 	USER_AVATAR      = func(uID, aID string) string { return USERS + uID + "/avatars/" + aID + ".jpg" }
 	USER_SETTINGS    = func(uID string) string { return USERS + uID + "/settings" }
 	USER_GUILDS      = func(uID string) string { return USERS + uID + "/guilds" }
+	USER_GUILD       = func(uID, gID string) string { return USERS + uID + "/guilds/" + gID }
 	USER_CHANNELS    = func(uID string) string { return USERS + uID + "/channels" }
 	USER_DEVICES     = func(uID string) string { return USERS + uID + "/devices" }
 	USER_CONNECTIONS = func(uID string) string { return USERS + uID + "/connections" }
@@ -56,6 +58,7 @@ var (
 	GUILD              = func(gID string) string { return GUILDS + gID }
 	GUILD_INIVTES      = func(gID string) string { return GUILDS + gID + "/invites" }
 	GUILD_CHANNELS     = func(gID string) string { return GUILDS + gID + "/channels" }
+	GUILD_MEMBERS      = func(gID string) string { return GUILDS + gID + "/members" }
 	GUILD_MEMBER       = func(gID, uID string) string { return GUILDS + gID + "/members/" + uID }
 	GUILD_BANS         = func(gID string) string { return GUILDS + gID + "/bans" }
 	GUILD_BAN          = func(gID, uID string) string { return GUILDS + gID + "/bans/" + uID }

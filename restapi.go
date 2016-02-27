@@ -18,21 +18,23 @@ import (
 	"image"
 	_ "image/jpeg" // For JPEG decoding
 	_ "image/png"  // For PNG decoding
+	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 )
 
+// ErrJSONUnmarshal is returned for JSON Unmarshall errors.
 var ErrJSONUnmarshal = errors.New("json unmarshal")
 
-// Request makes a (GET/POST/...) Requests to Discord REST API.
+// Request makes a (GET/POST/...) Requests to Discord REST API with JSON data.
 // All the other Discord REST Calls in this file use this function.
 func (s *Session) Request(method, urlStr string, data interface{}) (response []byte, err error) {
 
 	if s.Debug {
-		fmt.Printf("API REQUEST %8s :: %s\n", method, urlStr)
 		fmt.Println("API REQUEST  PAYLOAD :: [" + fmt.Sprintf("%+v", data) + "]")
 	}
 
@@ -44,7 +46,17 @@ func (s *Session) Request(method, urlStr string, data interface{}) (response []b
 		}
 	}
 
-	req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+	return s.request(method, urlStr, "application/json", body)
+}
+
+// request makes a (GET/POST/...) Requests to Discord REST API.
+func (s *Session) request(method, urlStr, contentType string, b []byte) (response []byte, err error) {
+
+	if s.Debug {
+		fmt.Printf("API REQUEST %8s :: %s\n", method, urlStr)
+	}
+
+	req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(b))
 	if err != nil {
 		return
 	}
@@ -55,7 +67,7 @@ func (s *Session) Request(method, urlStr string, data interface{}) (response []b
 		req.Header.Set("authorization", s.Token)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	// TODO: Make a configurable static variable.
 	req.Header.Set("User-Agent", fmt.Sprintf("DiscordBot (https://github.com/bwmarrin/discordgo, v%s)", VERSION))
 
@@ -68,10 +80,15 @@ func (s *Session) Request(method, urlStr string, data interface{}) (response []b
 	client := &http.Client{Timeout: (20 * time.Second)}
 
 	resp, err := client.Do(req)
-	defer resp.Body.Close()
 	if err != nil {
 		return
 	}
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			fmt.Println("error closing resp body")
+		}
+	}()
 
 	response, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -96,17 +113,14 @@ func (s *Session) Request(method, urlStr string, data interface{}) (response []b
 		// TODO check for 401 response, invalidate token if we get one.
 
 	case 429: // TOO MANY REQUESTS - Rate limiting
-		// This will be changed to a more robust method later.
-		// which may be hugely different as this method could cause
-		// unending recursion
 		rl := RateLimit{}
 		err = json.Unmarshal(response, &rl)
 		if err != nil {
-			err = fmt.Errorf("Request unmarshal rate limit error : ", err)
+			err = fmt.Errorf("Request unmarshal rate limit error : %+v", err)
 			return
 		}
 		time.Sleep(rl.RetryAfter)
-		response, err = s.Request(method, urlStr, data)
+		response, err = s.request(method, urlStr, contentType, b)
 
 	default: // Error condition
 		err = fmt.Errorf("HTTP %s, %s", resp.Status, response)
@@ -373,7 +387,7 @@ func (s *Session) GuildEdit(guildID, name string) (st *Guild, err error) {
 	return
 }
 
-// GuildDelete deletes or leaves a Guild.
+// GuildDelete deletes a Guild.
 // guildID   : The ID of a Guild
 func (s *Session) GuildDelete(guildID string) (st *Guild, err error) {
 
@@ -383,6 +397,14 @@ func (s *Session) GuildDelete(guildID string) (st *Guild, err error) {
 	}
 
 	err = unmarshal(body, &st)
+	return
+}
+
+// GuildLeave leaves a Guild.
+// guildID   : The ID of a Guild
+func (s *Session) GuildLeave(guildID string) (err error) {
+
+	_, err = s.Request("DELETE", USER_GUILD("@me", guildID), nil)
 	return
 }
 
@@ -426,6 +448,51 @@ func (s *Session) GuildBanDelete(guildID, userID string) (err error) {
 	return
 }
 
+// GuildMembers returns a list of members for a guild.
+//  guildID  : The ID of a Guild.
+//  offset   : A number of members to skip
+//  limit    : max number of members to return
+func (s *Session) GuildMembers(guildID string, offset, limit int) (st []*Member, err error) {
+
+	uri := GUILD_MEMBERS(guildID)
+
+	v := url.Values{}
+
+	if offset > 0 {
+		v.Set("offset", strconv.Itoa(offset))
+	}
+
+	if limit > 0 {
+		v.Set("limit", strconv.Itoa(limit))
+	}
+
+	if len(v) > 0 {
+		uri = fmt.Sprintf("%s?%s", uri, v.Encode())
+	}
+
+	body, err := s.Request("GET", uri, nil)
+	if err != nil {
+		return
+	}
+
+	err = unmarshal(body, &st)
+	return
+}
+
+// GuildMember returns a member of a guild.
+//  guildID   : The ID of a Guild.
+//  userID    : The ID of a User
+func (s *Session) GuildMember(guildID, userID string) (st *Member, err error) {
+
+	body, err := s.Request("GET", GUILD_MEMBER(guildID, userID), nil)
+	if err != nil {
+		return
+	}
+
+	err = unmarshal(body, &st)
+	return
+}
+
 // GuildMemberDelete removes the given user from the given guild.
 // guildID   : The ID of a Guild.
 // userID    : The ID of a User
@@ -440,9 +507,30 @@ func (s *Session) GuildMemberDelete(guildID, userID string) (err error) {
 // userID   : The ID of a User.
 // roles    : A list of role ID's to set on the member.
 func (s *Session) GuildMemberEdit(guildID, userID string, roles []string) (err error) {
+
 	data := struct {
 		Roles []string `json:"roles"`
 	}{roles}
+
+	_, err = s.Request("PATCH", GUILD_MEMBER(guildID, userID), data)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+// GuildMemberMove moves a guild member from one voice channel to another/none
+//  guildID   : The ID of a Guild.
+//  userID    : The ID of a User.
+//  channelID : The ID of a channel to move user to, or null?
+// NOTE : I am not entirely set on the name of this function and it may change
+// prior to the final 1.0.0 release of Discordgo
+func (s *Session) GuildMemberMove(guildID, userID, channelID string) (err error) {
+
+	data := struct {
+		ChannelID string `json:"channel_id"`
+	}{channelID}
 
 	_, err = s.Request("PATCH", GUILD_MEMBER(guildID, userID), data)
 	if err != nil {
@@ -491,28 +579,6 @@ func (s *Session) GuildChannelCreate(guildID, name, ctype string) (st *Channel, 
 // guildID   : The ID of a Guild.
 func (s *Session) GuildInvites(guildID string) (st []*Invite, err error) {
 	body, err := s.Request("GET", GUILD_INVITES(guildID), nil)
-	if err != nil {
-		return
-	}
-
-	err = unmarshal(body, &st)
-	return
-}
-
-// GuildInviteCreate creates a new invite for the given guild.
-// guildID   : The ID of a Guild.
-// i         : An Invite struct with the values MaxAge, MaxUses, Temporary,
-//             and XkcdPass defined.
-func (s *Session) GuildInviteCreate(guildID string, i *Invite) (st *Invite, err error) {
-
-	data := struct {
-		MaxAge    int  `json:"max_age"`
-		MaxUses   int  `json:"max_uses"`
-		Temporary bool `json:"temporary"`
-		XKCDPass  bool `json:"xkcdpass"`
-	}{i.MaxAge, i.MaxUses, i.Temporary, i.XkcdPass}
-
-	body, err := s.Request("POST", GUILD_INVITES(guildID), data)
 	if err != nil {
 		return
 	}
@@ -649,7 +715,7 @@ func (s *Session) GuildSplash(guildID string) (img image.Image, err error) {
 // ------------------------------------------------------------------------------------------------
 
 // Channel returns a Channel strucutre of a specific Channel.
-// channelID  : The ID of the Channel you want returend.
+// channelID  : The ID of the Channel you want returned.
 func (s *Session) Channel(channelID string) (st *Channel, err error) {
 	body, err := s.Request("GET", CHANNEL(channelID), nil)
 	if err != nil {
@@ -706,7 +772,7 @@ func (s *Session) ChannelTyping(channelID string) (err error) {
 // limit     : The number messages that can be returned.
 // beforeID  : If provided all messages returned will be before given ID.
 // afterID   : If provided all messages returned will be after given ID.
-func (s *Session) ChannelMessages(channelID string, limit int, beforeID int, afterID int) (st []*Message, err error) {
+func (s *Session) ChannelMessages(channelID string, limit int, beforeID, afterID string) (st []*Message, err error) {
 
 	uri := CHANNEL_MESSAGES(channelID)
 
@@ -714,11 +780,11 @@ func (s *Session) ChannelMessages(channelID string, limit int, beforeID int, aft
 	if limit > 0 {
 		v.Set("limit", strconv.Itoa(limit))
 	}
-	if afterID > 0 {
-		v.Set("after", strconv.Itoa(afterID))
+	if afterID != "" {
+		v.Set("after", afterID)
 	}
-	if beforeID > 0 {
-		v.Set("before", strconv.Itoa(beforeID))
+	if beforeID != "" {
+		v.Set("before", beforeID)
 	}
 	if len(v) > 0 {
 		uri = fmt.Sprintf("%s?%s", uri, v.Encode())
@@ -742,17 +808,17 @@ func (s *Session) ChannelMessageAck(channelID, messageID string) (err error) {
 	return
 }
 
-// ChannelMessageSend sends a message to the given channel.
+// channelMessageSend sends a message to the given channel.
 // channelID : The ID of a Channel.
 // content   : The message to send.
-// NOTE, mention and tts parameters may be added in 2.x branch.
-func (s *Session) ChannelMessageSend(channelID string, content string) (st *Message, err error) {
+// tts       : Whether to send the message with TTS.
+func (s *Session) channelMessageSend(channelID, content string, tts bool) (st *Message, err error) {
 
 	// TODO: nonce string ?
 	data := struct {
 		Content string `json:"content"`
 		TTS     bool   `json:"tts"`
-	}{content, false}
+	}{content, tts}
 
 	// Send the message to the given channel
 	response, err := s.Request("POST", CHANNEL_MESSAGES(channelID), data)
@@ -762,6 +828,22 @@ func (s *Session) ChannelMessageSend(channelID string, content string) (st *Mess
 
 	err = unmarshal(response, &st)
 	return
+}
+
+// ChannelMessageSend sends a message to the given channel.
+// channelID : The ID of a Channel.
+// content   : The message to send.
+func (s *Session) ChannelMessageSend(channelID string, content string) (st *Message, err error) {
+
+	return s.channelMessageSend(channelID, content, false)
+}
+
+// ChannelMessageSendTTS sends a message to the given channel with Text to Speech.
+// channelID : The ID of a Channel.
+// content   : The message to send.
+func (s *Session) ChannelMessageSendTTS(channelID string, content string) (st *Message, err error) {
+
+	return s.channelMessageSend(channelID, content, true)
 }
 
 // ChannelMessageEdit edits an existing message, replacing it entirely with
@@ -787,6 +869,38 @@ func (s *Session) ChannelMessageEdit(channelID, messageID, content string) (st *
 func (s *Session) ChannelMessageDelete(channelID, messageID string) (err error) {
 
 	_, err = s.Request("DELETE", CHANNEL_MESSAGE(channelID, messageID), nil)
+	return
+}
+
+// ChannelFileSend sends a file to the given channel.
+// channelID : The ID of a Channel.
+// io.Reader : A reader for the file contents.
+func (s *Session) ChannelFileSend(channelID, name string, r io.Reader) (st *Message, err error) {
+
+	body := &bytes.Buffer{}
+	bodywriter := multipart.NewWriter(body)
+
+	writer, err := bodywriter.CreateFormFile("file", name)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = io.Copy(writer, r)
+	if err != nil {
+		return
+	}
+
+	err = bodywriter.Close()
+	if err != nil {
+		return
+	}
+
+	response, err := s.request("POST", CHANNEL_MESSAGES(channelID), bodywriter.FormDataContentType(), body.Bytes())
+	if err != nil {
+		return
+	}
+
+	err = unmarshal(response, &st)
 	return
 }
 

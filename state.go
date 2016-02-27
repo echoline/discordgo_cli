@@ -12,9 +12,13 @@
 
 package discordgo
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
-var nilError error = errors.New("State not instantiated, please use discordgo.New() or assign Session.State.")
+// ErrNilState is returned when the state is nil.
+var ErrNilState = errors.New("State not instantiated, please use discordgo.New() or assign Session.State.")
 
 // NewState creates an empty state.
 func NewState() *State {
@@ -29,8 +33,9 @@ func NewState() *State {
 // OnReady takes a Ready event and updates all internal state.
 func (s *State) OnReady(r *Ready) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
+
 	s.Lock()
 	defer s.Unlock()
 
@@ -42,8 +47,9 @@ func (s *State) OnReady(r *Ready) error {
 // updates it if it already exists.
 func (s *State) GuildAdd(guild *Guild) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
+
 	s.Lock()
 	defer s.Unlock()
 
@@ -67,8 +73,9 @@ func (s *State) GuildAdd(guild *Guild) error {
 // GuildRemove removes a guild from current world state.
 func (s *State) GuildRemove(guild *Guild) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
+
 	s.Lock()
 	defer s.Unlock()
 
@@ -88,8 +95,9 @@ func (s *State) GuildRemove(guild *Guild) error {
 //     isInGuild := err == nil
 func (s *State) Guild(guildID string) (*Guild, error) {
 	if s == nil {
-		return nil, nilError
+		return nil, ErrNilState
 	}
+
 	s.RLock()
 	defer s.RUnlock()
 
@@ -108,7 +116,7 @@ func (s *State) Guild(guildID string) (*Guild, error) {
 // updates it if it already exists.
 func (s *State) MemberAdd(member *Member) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
 
 	guild, err := s.Guild(member.GuildID)
@@ -133,7 +141,7 @@ func (s *State) MemberAdd(member *Member) error {
 // MemberRemove removes a member from current world state.
 func (s *State) MemberRemove(member *Member) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
 
 	guild, err := s.Guild(member.GuildID)
@@ -157,7 +165,7 @@ func (s *State) MemberRemove(member *Member) error {
 // Member gets a member by ID from a guild.
 func (s *State) Member(guildID, userID string) (*Member, error) {
 	if s == nil {
-		return nil, nilError
+		return nil, ErrNilState
 	}
 
 	guild, err := s.Guild(guildID)
@@ -183,7 +191,7 @@ func (s *State) Member(guildID, userID string) (*Member, error) {
 // a guild.
 func (s *State) ChannelAdd(channel *Channel) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
 
 	if channel.IsPrivate {
@@ -229,7 +237,7 @@ func (s *State) ChannelAdd(channel *Channel) error {
 // ChannelRemove removes a channel from current world state.
 func (s *State) ChannelRemove(channel *Channel) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
 
 	if channel.IsPrivate {
@@ -265,7 +273,7 @@ func (s *State) ChannelRemove(channel *Channel) error {
 // GuildChannel gets a channel by ID from a guild.
 func (s *State) GuildChannel(guildID, channelID string) (*Channel, error) {
 	if s == nil {
-		return nil, nilError
+		return nil, ErrNilState
 	}
 
 	guild, err := s.Guild(guildID)
@@ -288,8 +296,9 @@ func (s *State) GuildChannel(guildID, channelID string) (*Channel, error) {
 // PrivateChannel gets a private channel by ID.
 func (s *State) PrivateChannel(channelID string) (*Channel, error) {
 	if s == nil {
-		return nil, nilError
+		return nil, ErrNilState
 	}
+
 	s.RLock()
 	defer s.RUnlock()
 
@@ -305,7 +314,7 @@ func (s *State) PrivateChannel(channelID string) (*Channel, error) {
 // Channel gets a channel by ID, it will look in all guilds an private channels.
 func (s *State) Channel(channelID string) (*Channel, error) {
 	if s == nil {
-		return nil, nilError
+		return nil, ErrNilState
 	}
 
 	c, err := s.PrivateChannel(channelID)
@@ -326,7 +335,7 @@ func (s *State) Channel(channelID string) (*Channel, error) {
 // Emoji returns an emoji for a guild and emoji id.
 func (s *State) Emoji(guildID, emojiID string) (*Emoji, error) {
 	if s == nil {
-		return nil, nilError
+		return nil, ErrNilState
 	}
 
 	guild, err := s.Guild(guildID)
@@ -349,7 +358,7 @@ func (s *State) Emoji(guildID, emojiID string) (*Emoji, error) {
 // EmojiAdd adds an emoji to the current world state.
 func (s *State) EmojiAdd(guildID string, emoji *Emoji) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
 
 	guild, err := s.Guild(guildID)
@@ -386,7 +395,7 @@ func (s *State) EmojisAdd(guildID string, emojis []*Emoji) error {
 // Messages are kept in state up to s.MaxMessageCount
 func (s *State) MessageAdd(message *Message) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
 
 	c, err := s.Channel(message.ChannelID)
@@ -410,7 +419,10 @@ func (s *State) MessageAdd(message *Message) error {
 	if len(c.Messages) > s.MaxMessageCount {
 		s.Unlock()
 		for len(c.Messages) > s.MaxMessageCount {
-			s.MessageRemove(c.Messages[0])
+			err := s.MessageRemove(c.Messages[0])
+			if err != nil {
+				fmt.Println("message remove error: ", err)
+			}
 		}
 		s.Lock()
 	}
@@ -420,8 +432,9 @@ func (s *State) MessageAdd(message *Message) error {
 // MessageRemove removes a message from the world state.
 func (s *State) MessageRemove(message *Message) error {
 	if s == nil {
-		return nilError
+		return ErrNilState
 	}
+
 	c, err := s.Channel(message.ChannelID)
 	if err != nil {
 		return err
@@ -443,8 +456,9 @@ func (s *State) MessageRemove(message *Message) error {
 // Message gets a message by channel and message ID.
 func (s *State) Message(channelID, messageID string) (*Message, error) {
 	if s == nil {
-		return nil, nilError
+		return nil, ErrNilState
 	}
+
 	c, err := s.Channel(channelID)
 	if err != nil {
 		return nil, err
@@ -460,4 +474,47 @@ func (s *State) Message(channelID, messageID string) (*Message, error) {
 	}
 
 	return nil, errors.New("Message not found.")
+}
+
+// onInterface handles all events related to states.
+func (s *State) onInterface(se *Session, i interface{}) (err error) {
+	if s == nil {
+		return ErrNilState
+	}
+	if !se.StateEnabled {
+		return nil
+	}
+
+	switch t := i.(type) {
+	case *Ready:
+		err = s.OnReady(t)
+	case *GuildCreate:
+		err = s.GuildAdd(t.Guild)
+	case *GuildUpdate:
+		err = s.GuildAdd(t.Guild)
+	case *GuildDelete:
+		err = s.GuildRemove(t.Guild)
+	case *GuildMemberAdd:
+		err = s.MemberAdd(t.Member)
+	case *GuildMemberUpdate:
+		err = s.MemberAdd(t.Member)
+	case *GuildMemberRemove:
+		err = s.MemberRemove(t.Member)
+	case *GuildEmojisUpdate:
+		err = s.EmojisAdd(t.GuildID, t.Emojis)
+	case *ChannelCreate:
+		err = s.ChannelAdd(t.Channel)
+	case *ChannelUpdate:
+		err = s.ChannelAdd(t.Channel)
+	case *ChannelDelete:
+		err = s.ChannelRemove(t.Channel)
+	case *MessageCreate:
+		err = s.MessageAdd(t.Message)
+	case *MessageUpdate:
+		err = s.MessageAdd(t.Message)
+	case *MessageDelete:
+		err = s.MessageRemove(t.Message)
+	}
+
+	return
 }
