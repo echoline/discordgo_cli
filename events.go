@@ -33,6 +33,9 @@ var eventToInterface = map[string]interface{}{
 	"MESSAGE_CREATE":            MessageCreate{},
 	"MESSAGE_UPDATE":            MessageUpdate{},
 	"MESSAGE_DELETE":            MessageDelete{},
+	"MESSAGE_REACTION_ADD":      MessageReaction{},
+	"MESSAGE_REACTION_REMOVE":   MessageReaction{},
+	"MESSAGE_REACTION_REMOVE_ALL": MessageReaction{},
 	"PRESENCE_UPDATE":           PresenceUpdate{},
 	"READY":                     Ready{},
 	"USER_UPDATE":               UserUpdate{},
@@ -60,6 +63,10 @@ type MessageUpdate struct {
 
 // MessageDelete is a wrapper struct for an event.
 type MessageDelete struct {
+	*Message
+}
+
+type MessageReaction struct {
 	*Message
 }
 
